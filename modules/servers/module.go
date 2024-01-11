@@ -5,23 +5,27 @@ import (
 	"github.com/Japanisnmm/GoBackend101/modules/middlewares/middlewaresRepositories"
 	"github.com/Japanisnmm/GoBackend101/modules/middlewares/middlewaresUsecases"
 	"github.com/Japanisnmm/GoBackend101/modules/monitor/monitorHandlers"
+	"github.com/Japanisnmm/GoBackend101/modules/users/usersHandlers"
+	"github.com/Japanisnmm/GoBackend101/modules/users/usersRepositories"
+	"github.com/Japanisnmm/GoBackend101/modules/users/usersUsecases"
 	"github.com/gofiber/fiber/v2"
 )
 
 type IModuleFactory interface {
 	MonitorModule()
+	UsersModule()
 }
 
 type moduleFactory struct {
-	router fiber.Router
-	server  *server
+	r fiber.Router
+	s  *server
 	mid middlewaresHandlers.IMiddlewaresHandler
 }
 
-func InitModule(r fiber.Router, server *server,mid middlewaresHandlers.IMiddlewaresHandler) IModuleFactory {
+func InitModule(r fiber.Router, s *server,mid middlewaresHandlers.IMiddlewaresHandler) IModuleFactory {
     return &moduleFactory {
-		router:r,
-		server: server,
+		r:    r,
+		s:   s,
 		mid : mid,
 	}
 
@@ -36,6 +40,19 @@ func InitMiddlewares(s *server) middlewaresHandlers.IMiddlewaresHandler {
 }
 
 func (m *moduleFactory) MonitorModule() {
-	handler := monitorHandlers.MonitorHandler(m.server.cfg)
-    m.router.Get("/", handler.HealthCheck)
+	handler := monitorHandlers.MonitorHandler(m.s.cfg)
+    m.r.Get("/", handler.HealthCheck)
+}
+
+func (m *moduleFactory) UsersModule(){
+	repository := usersRepositories.UsersRepository(m.s.db)
+    usecase := usersUsecases.UsersUsecase(m.s.cfg,repository)
+	handler := usersHandlers.UsersHandler(m.s.cfg, usecase)
+    // /v1/users/sign
+	router := m.r.Group("/users")
+
+	router.Post("/signup",handler.SignUpCustomer)
+	router.Post("/signin",handler.SignIn)
+
+
 }
