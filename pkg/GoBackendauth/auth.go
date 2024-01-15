@@ -29,7 +29,9 @@ type gobackendAdmin struct {
 	*gobackendAuth
 }
 
-
+type gobackendApiKey struct {
+	*gobackendAuth
+}
 
 
 
@@ -42,6 +44,9 @@ type IGobackendAuth interface {
 	SignToken() string
 }
 type IGobackendAdmin interface {
+	SignToken() string
+}
+type IGobackendApiKey interface {
 	SignToken() string
 }
 
@@ -62,6 +67,12 @@ func (a *gobackendAuth) SignToken() string {
 func (a *gobackendAdmin) SignToken() string {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, a.mapClaims)
 	ss, _ := token.SignedString(a.cfg.AdminKey())
+	return ss
+}
+
+func (a *gobackendApiKey) SignToken() string {
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, a.mapClaims)
+	ss, _ := token.SignedString(a.cfg.ApiKey())
 	return ss
 }
 
@@ -114,6 +125,30 @@ func ParseAdminToken(cfg config.IJwtConfig, tokenString string) (*gobackendMapCl
 
 }
 
+func ParseApiKey(cfg config.IJwtConfig, tokenString string) (*gobackendMapClaims, error) {
+	token, err := jwt.ParseWithClaims(tokenString, &gobackendMapClaims{}, func(t *jwt.Token) (interface{}, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("signing method is invalid")
+		}
+		return cfg.ApiKey(), nil
+	})
+	if err != nil {
+		if  errors.Is(err , jwt.ErrTokenMalformed) {
+			return nil , fmt.Errorf("token format is in valid")
+		} else if errors.Is(err, jwt.ErrTokenExpired){
+			return nil,fmt.Errorf("token had expired")
+		}else {
+			return nil ,fmt.Errorf("parse token failed: %v", err)
+		}
+	}
+	if claims, ok := token.Claims.(*gobackendMapClaims); ok {
+		return claims,nil
+	}else {
+		return nil,fmt.Errorf("claims type is invalid")
+	}
+
+}
+
 
 
 func NewGobackendAuth (tokenType TokenType, cfg config.IJwtConfig, claims *users.UserClaims) (IGobackendAuth, error) {
@@ -124,6 +159,8 @@ func NewGobackendAuth (tokenType TokenType, cfg config.IJwtConfig, claims *users
 		return newRefreshToken(cfg, claims),nil
 	case Admin:
 		return newAdminToken(cfg ),nil
+	case ApiKey:
+		return newApiKey(cfg ),nil
 	default:
 		return nil, fmt.Errorf("unknown token type")
 	}
@@ -210,3 +247,26 @@ func newAdminToken(cfg config.IJwtConfig) IGobackendAuth {
 
 	}
 }
+
+
+func newApiKey(cfg config.IJwtConfig) IGobackendAuth {
+	return &gobackendApiKey{
+		&gobackendAuth{
+			cfg: cfg,
+			mapClaims: &gobackendMapClaims{
+				Claims: nil,
+				RegisteredClaims: jwt.RegisteredClaims{
+					Issuer:    "Gobackendshop-api",
+					Subject:   "api-key",
+					Audience:  []string{ "admin","customer"},
+					ExpiresAt: jwt.NewNumericDate(time.Now().AddDate(2,0,0)),
+					NotBefore: jwt.NewNumericDate(time.Now()),
+					IssuedAt:  jwt.NewNumericDate(time.Now()),
+				},
+			},
+		},
+
+
+	}
+}
+
